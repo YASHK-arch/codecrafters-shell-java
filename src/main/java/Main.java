@@ -46,9 +46,6 @@ public class Main {
             else if (command.startsWith("echo ")) {
                 System.out.println(command.substring(5));
             }
-            else if (command.startsWith("pwd")){
-                System.out.println(command.substring(5));
-            }
 
             else if (command.startsWith("type ")) {
 
@@ -67,6 +64,8 @@ public class Main {
                 } else {
                     System.out.println(commandName + ": not found");
                 }
+            } else if (command.startsWith("pwd")) {
+                System.out.println(System.getProperty("user.dir"));
             }
 
             else {
