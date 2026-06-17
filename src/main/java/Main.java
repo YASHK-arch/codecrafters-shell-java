@@ -28,7 +28,7 @@ public class Main {
 
         Scanner sc = new Scanner(System.in);
 
-        HashSet<String> builtins = new HashSet<>();
+        Set<String> builtins = new HashSet<>();
         builtins.add("echo");
         builtins.add("type");
         builtins.add("exit");
@@ -43,11 +43,11 @@ public class Main {
             }
 
             else if (command.startsWith("echo ")) {
-                String message = command.substring(5);
-                System.out.println(message);
+                System.out.println(command.substring(5));
             }
 
             else if (command.startsWith("type ")) {
+
                 String commandName = command.substring(5).trim();
 
                 if (builtins.contains(commandName)) {
@@ -59,8 +59,7 @@ public class Main {
 
                 if (executable != null) {
                     System.out.println(
-                        commandName + " is " + executable.getAbsolutePath()
-                    );
+                            commandName + " is " + executable.getAbsolutePath());
                 } else {
                     System.out.println(commandName + ": not found");
                 }
@@ -69,7 +68,6 @@ public class Main {
             else {
 
                 String[] parts = command.trim().split("\\s+");
-
                 String commandName = parts[0];
 
                 File executable = findExecutable(commandName);
@@ -81,10 +79,8 @@ public class Main {
 
                 List<String> processCommand = new ArrayList<>();
 
-                processCommand.add(executable.getAbsolutePath());
-
-                for (int i = 1; i < parts.length; i++) {
-                    processCommand.add(parts[i]);
+                for (String part : parts) {
+                    processCommand.add(part);
                 }
 
                 ProcessBuilder pb = new ProcessBuilder(processCommand);
@@ -93,10 +89,8 @@ public class Main {
 
                 Process process = pb.start();
 
-                BufferedReader reader =
-                    new BufferedReader(
-                        new InputStreamReader(process.getInputStream())
-                    );
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream()));
 
                 String line;
 
