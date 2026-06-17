@@ -60,7 +60,7 @@ public class Main {
                 File newDir;
 
                 if (dirPath.equals("~")) {
-                    newDir = new File(System.getProperty("user.home"));
+                    newDir = new File(System.getenv("HOME"));
                 }
                 else if (dirPath.startsWith("/")) {
                     newDir = new File(dirPath);
