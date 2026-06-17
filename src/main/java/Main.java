@@ -32,7 +32,7 @@ public class Main {
         builtins.add("type");
         builtins.add("exit");
         builtins.add("pwd");
-        // builtins.add("exit");
+        builtins.add("cd");
 
         while (true) {
             System.out.print("$ ");
@@ -64,8 +64,28 @@ public class Main {
                 } else {
                     System.out.println(commandName + ": not found");
                 }
-            } else if (command.startsWith("pwd")) {
+            } else if (command.startsWith("pwd ")) {
                 System.out.println(System.getProperty("user.dir"));
+            }
+
+            else if(command.startsWith("cd ")){
+                String dirPath = command.substring(3);
+                File newDir;
+
+                if (dirPath.equals("~")){
+                    newDir = new File(System.getProperty("user.home"));
+                }
+                else{
+                    newDir = new File(dirPath);
+                }
+
+                if (newDir.exists() && newDir.isDirectory()){
+                    System.setProperty("user.dir", newDir.getAbsolutePath());
+                }
+                else{
+                    System.out.println("cd: " + dirPath + ": No such file or directory");
+                }
+
             }
 
             else {
