@@ -3,6 +3,41 @@ import java.io.*;
 
 public class Main {
 
+    // Input PARSER
+    private static List<String> parseCommand(String input) {
+        List<String> tokens = new ArrayList<>();
+
+        StringBuilder current = new StringBuilder();
+        boolean inSingleQuotes = false;
+
+        for (int i = 0; i < input.length(); i++) {
+            char ch = input.charAt(i);
+
+            if (ch == '\'') {
+                inSingleQuotes = !inSingleQuotes;
+                continue;
+            }
+
+            if (Character.isWhitespace(ch) && !inSingleQuotes) {
+
+                if (current.length() > 0) {
+                    tokens.add(current.toString());
+                    current.setLength(0);
+                }
+
+            } else {
+                current.append(ch);
+            }
+        }
+
+        if (current.length() > 0) {
+            tokens.add(current.toString());
+        }
+
+        return tokens;
+    }
+
+    // Checks Executability of the file and whether it exists or not
     private static File findExecutable(String commandName) {
         String pathEnv = System.getenv("PATH");
 
@@ -46,7 +81,18 @@ public class Main {
             }
 
             else if (command.startsWith("echo ")) {
-                System.out.println(command.substring(5));
+                List<String> parts = parseCommand(command);
+
+                for (int i = 1; i < parts.size(); i++) {
+
+                    if (i > 1) {
+                        System.out.print(" ");
+                    }
+
+                    System.out.print(parts.get(i));
+                }
+
+                System.out.println();
             }
 
             else if (command.equals("pwd")) {
@@ -61,11 +107,9 @@ public class Main {
 
                 if (dirPath.equals("~")) {
                     newDir = new File(System.getenv("HOME"));
-                }
-                else if (dirPath.startsWith("/")) {
+                } else if (dirPath.startsWith("/")) {
                     newDir = new File(dirPath);
-                }
-                else {
+                } else {
                     newDir = new File(currentDir, dirPath);
                 }
 
@@ -73,8 +117,7 @@ public class Main {
                     currentDir = newDir.getCanonicalFile();
                 } else {
                     System.out.println(
-                        "cd: " + dirPath + ": No such file or directory"
-                    );
+                            "cd: " + dirPath + ": No such file or directory");
                 }
             }
 
@@ -91,9 +134,8 @@ public class Main {
 
                 if (executable != null) {
                     System.out.println(
-                        commandName + " is " +
-                        executable.getAbsolutePath()
-                    );
+                            commandName + " is " +
+                                    executable.getAbsolutePath());
                 } else {
                     System.out.println(commandName + ": not found");
                 }
@@ -101,10 +143,8 @@ public class Main {
 
             else {
 
-                String[] parts = command.trim().split("\\s+");
-
-                String commandName = parts[0];
-
+                List<String> parts = parseCommand(command);
+                String commandName = parts.get(0);
                 File executable = findExecutable(commandName);
 
                 if (executable == null) {
@@ -112,11 +152,7 @@ public class Main {
                     continue;
                 }
 
-                List<String> processCommand = new ArrayList<>();
-
-                for (String part : parts) {
-                    processCommand.add(part);
-                }
+                List<String> processCommand = new ArrayList<>(parts);
 
                 ProcessBuilder pb = new ProcessBuilder(processCommand);
 
@@ -124,12 +160,9 @@ public class Main {
 
                 Process process = pb.start();
 
-                BufferedReader reader =
-                    new BufferedReader(
+                BufferedReader reader = new BufferedReader(
                         new InputStreamReader(
-                            process.getInputStream()
-                        )
-                    );
+                                process.getInputStream()));
 
                 String line;
 
