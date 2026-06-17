@@ -1,4 +1,3 @@
-import java.util.Scanner;
 import java.util.*;
 import java.io.*;
 
@@ -32,6 +31,8 @@ public class Main {
         builtins.add("echo");
         builtins.add("type");
         builtins.add("exit");
+        builtins.add("pwd");
+        // builtins.add("exit");
 
         while (true) {
             System.out.print("$ ");
@@ -43,6 +44,9 @@ public class Main {
             }
 
             else if (command.startsWith("echo ")) {
+                System.out.println(command.substring(5));
+            }
+            else if (command.startsWith("pwd")){
                 System.out.println(command.substring(5));
             }
 
