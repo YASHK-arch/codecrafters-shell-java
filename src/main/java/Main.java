@@ -34,6 +34,8 @@ public class Main {
         builtins.add("pwd");
         builtins.add("cd");
 
+        File currentDir = new File(System.getProperty("user.dir"));
+
         while (true) {
             System.out.print("$ ");
 
@@ -45,6 +47,35 @@ public class Main {
 
             else if (command.startsWith("echo ")) {
                 System.out.println(command.substring(5));
+            }
+
+            else if (command.equals("pwd")) {
+                System.out.println(currentDir.getAbsolutePath());
+            }
+
+            else if (command.startsWith("cd ")) {
+
+                String dirPath = command.substring(3).trim();
+
+                File newDir;
+
+                if (dirPath.equals("~")) {
+                    newDir = new File(System.getProperty("user.home"));
+                }
+                else if (dirPath.startsWith("/")) {
+                    newDir = new File(dirPath);
+                }
+                else {
+                    newDir = new File(currentDir, dirPath);
+                }
+
+                if (newDir.exists() && newDir.isDirectory()) {
+                    currentDir = newDir.getCanonicalFile();
+                } else {
+                    System.out.println(
+                        "cd: " + dirPath + ": No such file or directory"
+                    );
+                }
             }
 
             else if (command.startsWith("type ")) {
@@ -60,37 +91,18 @@ public class Main {
 
                 if (executable != null) {
                     System.out.println(
-                            commandName + " is " + executable.getAbsolutePath());
+                        commandName + " is " +
+                        executable.getAbsolutePath()
+                    );
                 } else {
                     System.out.println(commandName + ": not found");
                 }
-            } else if (command.startsWith("pwd ")) {
-                System.out.println(System.getProperty("user.dir"));
-            }
-
-            else if(command.startsWith("cd ")){
-                String dirPath = command.substring(3);
-                File newDir;
-
-                if (dirPath.equals("~")){
-                    newDir = new File(System.getProperty("user.home"));
-                }
-                else{
-                    newDir = new File(dirPath);
-                }
-
-                if (newDir.exists() && newDir.isDirectory()){
-                    System.setProperty("user.dir", newDir.getAbsolutePath());
-                }
-                else{
-                    System.out.println("cd: " + dirPath + ": No such file or directory");
-                }
-
             }
 
             else {
 
                 String[] parts = command.trim().split("\\s+");
+
                 String commandName = parts[0];
 
                 File executable = findExecutable(commandName);
@@ -112,8 +124,12 @@ public class Main {
 
                 Process process = pb.start();
 
-                BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(process.getInputStream()));
+                BufferedReader reader =
+                    new BufferedReader(
+                        new InputStreamReader(
+                            process.getInputStream()
+                        )
+                    );
 
                 String line;
 
