@@ -8,17 +8,26 @@ public class Main {
         List<String> tokens = new ArrayList<>();
 
         StringBuilder current = new StringBuilder();
+
         boolean inSingleQuotes = false;
+        boolean inDoubleQuotes = false;
 
         for (int i = 0; i < input.length(); i++) {
             char ch = input.charAt(i);
 
-            if (ch == '\'') {
+            if (ch == '\'' && !inDoubleQuotes) {
                 inSingleQuotes = !inSingleQuotes;
                 continue;
             }
 
-            if (Character.isWhitespace(ch) && !inSingleQuotes) {
+            if (ch == '"' && !inSingleQuotes) {
+                inDoubleQuotes = !inDoubleQuotes;
+                continue;
+            }
+
+            if (Character.isWhitespace(ch) &&
+                    !inSingleQuotes &&
+                    !inDoubleQuotes) {
 
                 if (current.length() > 0) {
                     tokens.add(current.toString());
@@ -134,8 +143,7 @@ public class Main {
 
                 if (executable != null) {
                     System.out.println(
-                            commandName + " is " +
-                                    executable.getAbsolutePath());
+                            commandName + " is " + executable.getAbsolutePath());
                 } else {
                     System.out.println(commandName + ": not found");
                 }
