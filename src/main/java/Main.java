@@ -15,6 +15,30 @@ public class Main {
         for (int i = 0; i < input.length(); i++) {
             char ch = input.charAt(i);
 
+            // Backslashes inside double quotes
+            if (ch == '\\' && inDoubleQuotes) {
+                if (i + 1 < input.length()) {
+                    char next = input.charAt(i + 1);
+
+                    if (next == '"' || next == '\\') {
+                        current.append(next);
+                        i++;
+                        continue;
+                    }
+                }
+
+                current.append('\\');
+                continue;
+            }
+            // Backslash escaping outside quotes
+            if (ch == '\\' && !inSingleQuotes && !inDoubleQuotes) {
+                if (i + 1 < input.length()) {
+                    current.append(input.charAt(i + 1));
+                    i++; // skip escaped character
+                }
+                continue;
+            }
+
             if (ch == '\'' && !inDoubleQuotes) {
                 inSingleQuotes = !inSingleQuotes;
                 continue;
@@ -22,15 +46,6 @@ public class Main {
 
             if (ch == '"' && !inSingleQuotes) {
                 inDoubleQuotes = !inDoubleQuotes;
-                continue;
-            }
-
-            // Backslash escaping outside quotes
-            if (ch == '\\' && !inSingleQuotes && !inDoubleQuotes) {
-                if (i + 1 < input.length()) {
-                    current.append(input.charAt(i + 1));
-                    i++; // skip escaped character
-                }
                 continue;
             }
 
