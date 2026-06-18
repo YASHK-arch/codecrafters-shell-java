@@ -25,6 +25,15 @@ public class Main {
                 continue;
             }
 
+            // Backslash escaping outside quotes
+            if (ch == '\\' && !inSingleQuotes && !inDoubleQuotes) {
+                if (i + 1 < input.length()) {
+                    current.append(input.charAt(i + 1));
+                    i++; // skip escaped character
+                }
+                continue;
+            }
+
             if (Character.isWhitespace(ch) &&
                     !inSingleQuotes &&
                     !inDoubleQuotes) {
