@@ -49,6 +49,32 @@ public class Main {
                 continue;
             }
 
+            if (!inSingleQuotes && !inDoubleQuotes) {
+
+                if (ch == '>') {
+                    if (current.length() > 0) {
+                        tokens.add(current.toString());
+                        current.setLength(0);
+                    }
+
+                    tokens.add(">");
+                    continue;
+                }
+
+                if (ch == '1' &&
+                        i + 1 < input.length() &&
+                        input.charAt(i + 1) == '>') {
+
+                    if (current.length() > 0) {
+                        tokens.add(current.toString());
+                        current.setLength(0);
+                    }
+
+                    tokens.add("1>");
+                    i++;
+                    continue;
+                }
+            }
             if (Character.isWhitespace(ch) &&
                     !inSingleQuotes &&
                     !inDoubleQuotes) {
@@ -116,14 +142,44 @@ public class Main {
             else if (command.startsWith("echo ")) {
                 List<String> parts = parseCommand(command);
 
-                for (int i = 1; i < parts.size(); i++) {
+                String outputFile = null;
+                int redirectIndex = -1;
+
+                for (int i = 0; i < parts.size(); i++) {
+                    if (parts.get(i).equals(">") ||
+                            parts.get(i).equals("1>")) {
+                        redirectIndex = i;
+                        outputFile = parts.get(i + 1);
+                        break;
+                    }
+                }
+
+                PrintStream out = System.out;
+
+                if (outputFile != null) {
+                    out = new PrintStream(
+                            new FileOutputStream(outputFile));
+                }
+
+                int end = redirectIndex == -1
+                        ? parts.size()
+                        : redirectIndex;
+
+                for (int i = 1; i < end; i++) {
 
                     if (i > 1) {
-                        System.out.print(" ");
+                        out.print(" ");
                     }
 
-                    System.out.print(parts.get(i));
+                    out.print(parts.get(i));
                 }
+
+                out.println();
+
+                if (out != System.out) {
+                    out.close();
+                }
+                /////////////////////////////////////////////
 
                 System.out.println();
             }
@@ -176,6 +232,25 @@ public class Main {
             else {
 
                 List<String> parts = parseCommand(command);
+
+                String outputFile = null;
+                int redirectIndex = -1;
+
+                for (int i = 0; i < parts.size(); i++) {
+                    if (parts.get(i).equals(">") ||
+                            parts.get(i).equals("1>")) {
+
+                        redirectIndex = i;
+                        outputFile = parts.get(i + 1);
+                        break;
+                    }
+                }
+
+                if (redirectIndex != -1) {
+                    parts = new ArrayList<>(
+                            parts.subList(0, redirectIndex));
+                }
+
                 String commandName = parts.get(0);
                 File executable = findExecutable(commandName);
 
@@ -188,18 +263,26 @@ public class Main {
 
                 ProcessBuilder pb = new ProcessBuilder(processCommand);
 
-                pb.redirectErrorStream(true);
+                if (outputFile != null) {
+                    pb.redirectOutput(new File(outputFile));
+                }
+
+                pb.redirectError(
+                        ProcessBuilder.Redirect.INHERIT);
 
                 Process process = pb.start();
 
-                BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(
-                                process.getInputStream()));
+                if (outputFile == null) {
 
-                String line;
+                    BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(
+                                    process.getInputStream()));
 
-                while ((line = reader.readLine()) != null) {
-                    System.out.println(line);
+                    String line;
+
+                    while ((line = reader.readLine()) != null) {
+                        System.out.println(line);
+                    }
                 }
 
                 process.waitFor();
