@@ -189,7 +189,6 @@ public class Main {
         builtins.add("jobs");
 
         File currentDir = new File(System.getProperty("user.dir"));
-        int jobCounter = 0;
         List<Job> jobs = new ArrayList<>();
 
         while (true) {
@@ -379,10 +378,19 @@ public class Main {
 
                     if (isBackground) {
                         // Track the background job
-                        jobCounter++;
+                        int nextJobNumber = 1;
+                        if (!jobs.isEmpty()) {
+                            int maxJobNumber = 0;
+                            for (Job j : jobs) {
+                                if (j.jobNumber > maxJobNumber) {
+                                    maxJobNumber = j.jobNumber;
+                                }
+                            }
+                            nextJobNumber = maxJobNumber + 1;
+                        }
                         long pid = process.pid();
-                        jobs.add(new Job(jobCounter, pid, commandStr, "Running", process));
-                        System.out.println("[" + jobCounter + "] " + pid);
+                        jobs.add(new Job(nextJobNumber, pid, commandStr, "Running", process));
+                        System.out.println("[" + nextJobNumber + "] " + pid);
                     } else {
                         process.waitFor();
                     }
