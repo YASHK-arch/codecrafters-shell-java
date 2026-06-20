@@ -41,8 +41,7 @@ public class Main {
 
             outThread = new Thread(() -> {
                 try {
-                    process.getInputStream().transferTo(out);
-                    out.flush();
+                    copyStream(process.getInputStream(), out);
                 } catch (IOException e) {}
                 finally {
                     try { process.getInputStream().close(); } catch(Exception e) {}
@@ -55,8 +54,7 @@ public class Main {
 
             errThread = new Thread(() -> {
                 try {
-                    process.getErrorStream().transferTo(err);
-                    err.flush();
+                    copyStream(process.getErrorStream(), err);
                 } catch (IOException e) {}
                 finally {
                     try { process.getErrorStream().close(); } catch(Exception e) {}
@@ -67,8 +65,7 @@ public class Main {
             if (in != null) {
                 inThread = new Thread(() -> {
                     try {
-                        in.transferTo(process.getOutputStream());
-                        process.getOutputStream().flush();
+                        copyStream(in, process.getOutputStream());
                     } catch (IOException e) {}
                     finally {
                         try { process.getOutputStream().close(); } catch(Exception e) {}
@@ -222,6 +219,15 @@ public class Main {
             this.command = command;
             this.status = status;
             this.task = task;
+        }
+    }
+
+    static void copyStream(InputStream in, OutputStream out) throws IOException {
+        byte[] buf = new byte[8192];
+        int read;
+        while ((read = in.read(buf)) != -1) {
+            out.write(buf, 0, read);
+            out.flush();
         }
     }
 
