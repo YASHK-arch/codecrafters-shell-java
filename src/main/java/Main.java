@@ -269,10 +269,21 @@ public class Main {
                     }
                 }
             } else if (cmd.equals("jobs")) {
-                for (Job job : jobs) {
+                for (int i = 0; i < jobs.size(); i++) {
+                    Job job = jobs.get(i);
+                    // Determine marker: + for most recent, - for second most recent, space for
+                    // others
+                    char marker = ' ';
+                    if (i == jobs.size() - 1) {
+                        // Most recent job (last in list)
+                        marker = '+';
+                    } else if (i == jobs.size() - 2) {
+                        // Second most recent job
+                        marker = '-';
+                    }
                     // Format: [1]+ Running sleep 10 &
                     String statusPadded = String.format("%-24s", job.status);
-                    out.println("[" + job.jobNumber + "]+  " + statusPadded + job.command + " &");
+                    out.println("[" + job.jobNumber + "]" + marker + "  " + statusPadded + job.command + " &");
                 }
             } else if (cmd.equals("type")) {
                 if (parts.size() < 2) {
