@@ -47,31 +47,53 @@ public class Main {
             }
 
             if (!inSingleQuotes && !inDoubleQuotes) {
+                // Handle redirection operators
                 if (ch == '>') {
-                    if (current.length() > 0) {
-                        tokens.add(current.toString());
-                        current.setLength(0);
+                    if (i > 0 && input.charAt(i - 1) == '>') {
+                        continue; // already handled as >>
                     }
-                    tokens.add(">");
-                    continue;
+                    if (i + 1 < input.length() && input.charAt(i + 1) == '>') {
+                        if (current.length() > 0) {
+                            tokens.add(current.toString());
+                            current.setLength(0);
+                        }
+                        tokens.add(">>");
+                        i++;
+                        continue;
+                    } else {
+                        if (current.length() > 0) {
+                            tokens.add(current.toString());
+                            current.setLength(0);
+                        }
+                        tokens.add(">");
+                        continue;
+                    }
                 }
-                if (ch == '1' && i + 1 < input.length() && input.charAt(i + 1) == '>') {
-                    if (current.length() > 0) {
-                        tokens.add(current.toString());
-                        current.setLength(0);
+                if (ch == '1' && i + 1 < input.length()) {
+                    if (input.charAt(i + 1) == '>') {
+                        if (i + 2 < input.length() && input.charAt(i + 2) == '>') {
+                            tokens.add("1>>");
+                            i += 2;
+                            continue;
+                        } else {
+                            tokens.add("1>");
+                            i++;
+                            continue;
+                        }
                     }
-                    tokens.add("1>");
-                    i++;
-                    continue;
                 }
-                if (ch == '2' && i + 1 < input.length() && input.charAt(i + 1) == '>') {
-                    if (current.length() > 0) {
-                        tokens.add(current.toString());
-                        current.setLength(0);
+                if (ch == '2' && i + 1 < input.length()) {
+                    if (input.charAt(i + 1) == '>') {
+                        if (i + 2 < input.length() && input.charAt(i + 2) == '>') {
+                            tokens.add("2>>");
+                            i += 2;
+                            continue;
+                        } else {
+                            tokens.add("2>");
+                            i++;
+                            continue;
+                        }
                     }
-                    tokens.add("2>");
-                    i++;
-                    continue;
                 }
             }
 
@@ -129,6 +151,8 @@ public class Main {
             // Handle redirection
             String outputFile = null;
             String errorFile = null;
+            boolean appendOut = false;
+            boolean appendErr = false;
             int redirectIndex = -1;
 
             for (int i = 0; i < parts.size(); i++) {
@@ -136,11 +160,25 @@ public class Main {
                 if ((token.equals(">") || token.equals("1>")) && i + 1 < parts.size()) {
                     redirectIndex = i;
                     outputFile = parts.get(i + 1);
+                    appendOut = false;
+                    break;
+                }
+                if ((token.equals(">>") || token.equals("1>>")) && i + 1 < parts.size()) {
+                    redirectIndex = i;
+                    outputFile = parts.get(i + 1);
+                    appendOut = true;
                     break;
                 }
                 if (token.equals("2>") && i + 1 < parts.size()) {
                     redirectIndex = i;
                     errorFile = parts.get(i + 1);
+                    appendErr = false;
+                    break;
+                }
+                if (token.equals("2>>") && i + 1 < parts.size()) {
+                    redirectIndex = i;
+                    errorFile = parts.get(i + 1);
+                    appendErr = true;
                     break;
                 }
             }
@@ -149,10 +187,10 @@ public class Main {
             PrintStream err = System.err;
 
             if (outputFile != null) {
-                out = new PrintStream(new FileOutputStream(outputFile));
+                out = new PrintStream(new FileOutputStream(outputFile, appendOut));
             }
             if (errorFile != null) {
-                err = new PrintStream(new FileOutputStream(errorFile));
+                err = new PrintStream(new FileOutputStream(errorFile, appendErr));
             }
 
             // Trim command parts before redirection
@@ -160,7 +198,8 @@ public class Main {
                 parts = new ArrayList<>(parts.subList(0, redirectIndex));
             }
 
-            if (parts.isEmpty()) continue;
+            if (parts.isEmpty())
+                continue;
 
             String cmd = parts.get(0);
 
@@ -170,7 +209,8 @@ public class Main {
 
             else if (cmd.equals("echo")) {
                 for (int i = 1; i < parts.size(); i++) {
-                    if (i > 1) out.print(" ");
+                    if (i > 1)
+                        out.print(" ");
                     out.print(parts.get(i));
                 }
                 out.println();
@@ -229,10 +269,12 @@ public class Main {
                     pb.directory(currentDir);
 
                     if (outputFile != null) {
-                        pb.redirectOutput(new File(outputFile));
+                        pb.redirectOutput(appendOut ? ProcessBuilder.Redirect.appendTo(new File(outputFile))
+                                : ProcessBuilder.Redirect.to(new File(outputFile)));
                     }
                     if (errorFile != null) {
-                        pb.redirectError(new File(errorFile));
+                        pb.redirectError(appendErr ? ProcessBuilder.Redirect.appendTo(new File(errorFile))
+                                : ProcessBuilder.Redirect.to(new File(errorFile)));
                     } else {
                         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                     }
@@ -251,8 +293,10 @@ public class Main {
                 }
             }
 
-            if (out != System.out) out.close();
-            if (err != System.err) err.close();
+            if (out != System.out)
+                out.close();
+            if (err != System.err)
+                err.close();
         }
 
         sc.close();
