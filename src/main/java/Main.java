@@ -139,6 +139,7 @@ public class Main {
         builtins.add("exit");
         builtins.add("pwd");
         builtins.add("cd");
+        builtins.add("jobs");
 
         File currentDir = new File(System.getProperty("user.dir"));
 
@@ -240,6 +241,8 @@ public class Main {
                         err.println("cd: " + dirPath + ": No such file or directory");
                     }
                 }
+            } else if (cmd.equals("jobs")) {
+                // Empty implementation for now
             }
 
             else if (cmd.equals("type")) {
