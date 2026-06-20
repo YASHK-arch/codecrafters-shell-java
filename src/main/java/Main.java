@@ -9,12 +9,14 @@ public class Main {
         long pid;
         String command;
         String status;
+        Process process;
 
-        Job(int jobNumber, long pid, String command, String status) {
+        Job(int jobNumber, long pid, String command, String status, Process process) {
             this.jobNumber = jobNumber;
             this.pid = pid;
             this.command = command;
             this.status = status;
+            this.process = process;
         }
     }
 
@@ -269,6 +271,14 @@ public class Main {
                     }
                 }
             } else if (cmd.equals("jobs")) {
+                // First, check which jobs have completed
+                for (Job job : jobs) {
+                    if (!job.process.isAlive()) {
+                        job.status = "Done";
+                    }
+                }
+
+                // Display all jobs
                 for (int i = 0; i < jobs.size(); i++) {
                     Job job = jobs.get(i);
                     // Determine marker: + for most recent, - for second most recent, space for
@@ -283,8 +293,15 @@ public class Main {
                     }
                     // Format: [1]+ Running sleep 10 &
                     String statusPadded = String.format("%-24s", job.status);
-                    out.println("[" + job.jobNumber + "]" + marker + "  " + statusPadded + job.command + " &");
+                    String commandLine = job.command;
+                    if (job.status.equals("Running")) {
+                        commandLine += " &";
+                    }
+                    out.println("[" + job.jobNumber + "]" + marker + "  " + statusPadded + commandLine);
                 }
+
+                // Remove completed jobs
+                jobs.removeIf(job -> job.status.equals("Done"));
             } else if (cmd.equals("type")) {
                 if (parts.size() < 2) {
                     err.println("type: missing operand");
@@ -331,7 +348,7 @@ public class Main {
                         // Track the background job
                         jobCounter++;
                         long pid = process.pid();
-                        jobs.add(new Job(jobCounter, pid, commandStr, "Running"));
+                        jobs.add(new Job(jobCounter, pid, commandStr, "Running", process));
                         System.out.println("[" + jobCounter + "] " + pid);
                     } else {
                         process.waitFor();
