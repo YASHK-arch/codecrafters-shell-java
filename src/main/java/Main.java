@@ -3,6 +3,21 @@ import java.io.*;
 
 public class Main {
 
+    // Job class to store background job information
+    static class Job {
+        int jobNumber;
+        long pid;
+        String command;
+        String status;
+
+        Job(int jobNumber, long pid, String command, String status) {
+            this.jobNumber = jobNumber;
+            this.pid = pid;
+            this.command = command;
+            this.status = status;
+        }
+    }
+
     // Input PARSER
     private static List<String> parseCommand(String input) {
         List<String> tokens = new ArrayList<>();
@@ -143,6 +158,7 @@ public class Main {
 
         File currentDir = new File(System.getProperty("user.dir"));
         int jobCounter = 0;
+        List<Job> jobs = new ArrayList<>();
 
         while (true) {
             System.out.print("$ ");
@@ -156,6 +172,9 @@ public class Main {
                 isBackground = true;
                 parts.remove(parts.size() - 1);
             }
+
+            // Save command for jobs list (before redirection trimming)
+            String commandStr = String.join(" ", parts);
 
             // Handle redirection
             String outputFile = null;
@@ -250,10 +269,12 @@ public class Main {
                     }
                 }
             } else if (cmd.equals("jobs")) {
-                // Empty implementation for now
-            }
-
-            else if (cmd.equals("type")) {
+                for (Job job : jobs) {
+                    // Format: [1]+ Running sleep 10 &
+                    String statusPadded = String.format("%-24s", job.status);
+                    out.println("[" + job.jobNumber + "]+  " + statusPadded + job.command + " &");
+                }
+            } else if (cmd.equals("type")) {
                 if (parts.size() < 2) {
                     err.println("type: missing operand");
                 } else {
@@ -296,9 +317,10 @@ public class Main {
                     Process process = pb.start();
 
                     if (isBackground) {
-                        // Print job number and PID
+                        // Track the background job
                         jobCounter++;
                         long pid = process.pid();
+                        jobs.add(new Job(jobCounter, pid, commandStr, "Running"));
                         System.out.println("[" + jobCounter + "] " + pid);
                     } else {
                         process.waitFor();
