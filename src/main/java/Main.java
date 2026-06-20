@@ -147,6 +147,36 @@ public class Main {
         return null;
     }
 
+    // Reap completed background jobs and display them as Done
+    private static void reapJobs(List<Job> jobs, PrintStream out) {
+        // Check which jobs have completed
+        for (Job job : jobs) {
+            if (!job.process.isAlive()) {
+                job.status = "Done";
+            }
+        }
+
+        // Display completed jobs as Done
+        for (int i = 0; i < jobs.size(); i++) {
+            Job job = jobs.get(i);
+            if (job.status.equals("Done")) {
+                // Determine marker: + for most recent, - for second most recent, space for
+                // others
+                char marker = ' ';
+                if (i == jobs.size() - 1) {
+                    marker = '+';
+                } else if (i == jobs.size() - 2) {
+                    marker = '-';
+                }
+                String statusPadded = String.format("%-24s", job.status);
+                out.println("[" + job.jobNumber + "]" + marker + "  " + statusPadded + job.command);
+            }
+        }
+
+        // Remove completed jobs
+        jobs.removeIf(job -> job.status.equals("Done"));
+    }
+
     public static void main(String[] args) throws Exception {
         Scanner sc = new Scanner(System.in);
 
@@ -163,6 +193,9 @@ public class Main {
         List<Job> jobs = new ArrayList<>();
 
         while (true) {
+            // Reap completed background jobs before prompt
+            reapJobs(jobs, System.out);
+
             System.out.print("$ ");
             String command = sc.nextLine();
 
