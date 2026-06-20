@@ -6,7 +6,6 @@ public class Main {
     // Input PARSER
     private static List<String> parseCommand(String input) {
         List<String> tokens = new ArrayList<>();
-
         StringBuilder current = new StringBuilder();
 
         boolean inSingleQuotes = false;
@@ -19,14 +18,12 @@ public class Main {
             if (ch == '\\' && inDoubleQuotes) {
                 if (i + 1 < input.length()) {
                     char next = input.charAt(i + 1);
-
                     if (next == '"' || next == '\\') {
                         current.append(next);
                         i++;
                         continue;
                     }
                 }
-
                 current.append('\\');
                 continue;
             }
@@ -50,40 +47,30 @@ public class Main {
             }
 
             if (!inSingleQuotes && !inDoubleQuotes) {
-
                 if (ch == '>') {
                     if (current.length() > 0) {
                         tokens.add(current.toString());
                         current.setLength(0);
                     }
-
                     tokens.add(">");
                     continue;
                 }
-
-                if (ch == '1' &&
-                        i + 1 < input.length() &&
-                        input.charAt(i + 1) == '>') {
-
+                if (ch == '1' && i + 1 < input.length() && input.charAt(i + 1) == '>') {
                     if (current.length() > 0) {
                         tokens.add(current.toString());
                         current.setLength(0);
                     }
-
                     tokens.add("1>");
                     i++;
                     continue;
                 }
             }
-            if (Character.isWhitespace(ch) &&
-                    !inSingleQuotes &&
-                    !inDoubleQuotes) {
 
+            if (Character.isWhitespace(ch) && !inSingleQuotes && !inDoubleQuotes) {
                 if (current.length() > 0) {
                     tokens.add(current.toString());
                     current.setLength(0);
                 }
-
             } else {
                 current.append(ch);
             }
@@ -99,26 +86,20 @@ public class Main {
     // Checks Executability of the file and whether it exists or not
     private static File findExecutable(String commandName) {
         String pathEnv = System.getenv("PATH");
-
         if (pathEnv == null) {
             return null;
         }
-
         String[] pathDirs = pathEnv.split(File.pathSeparator);
-
         for (String dir : pathDirs) {
             File file = new File(dir, commandName);
-
             if (file.exists() && file.canExecute()) {
                 return file;
             }
         }
-
         return null;
     }
 
     public static void main(String[] args) throws Exception {
-
         Scanner sc = new Scanner(System.in);
 
         Set<String> builtins = new HashSet<>();
@@ -132,7 +113,6 @@ public class Main {
 
         while (true) {
             System.out.print("$ ");
-
             String command = sc.nextLine();
 
             if (command.equals("exit")) {
@@ -146,8 +126,7 @@ public class Main {
                 int redirectIndex = -1;
 
                 for (int i = 0; i < parts.size(); i++) {
-                    if (parts.get(i).equals(">") ||
-                            parts.get(i).equals("1>")) {
+                    if (parts.get(i).equals(">") || parts.get(i).equals("1>")) {
                         redirectIndex = i;
                         outputFile = parts.get(i + 1);
                         break;
@@ -155,33 +134,22 @@ public class Main {
                 }
 
                 PrintStream out = System.out;
-
                 if (outputFile != null) {
-                    out = new PrintStream(
-                            new FileOutputStream(outputFile));
+                    out = new PrintStream(new FileOutputStream(outputFile));
                 }
 
-                int end = redirectIndex == -1
-                        ? parts.size()
-                        : redirectIndex;
-
+                int end = redirectIndex == -1 ? parts.size() : redirectIndex;
                 for (int i = 1; i < end; i++) {
-
                     if (i > 1) {
                         out.print(" ");
                     }
-
                     out.print(parts.get(i));
                 }
-
                 out.println();
 
                 if (out != System.out) {
                     out.close();
                 }
-                /////////////////////////////////////////////
-
-                System.out.println();
             }
 
             else if (command.equals("pwd")) {
@@ -189,9 +157,7 @@ public class Main {
             }
 
             else if (command.startsWith("cd ")) {
-
                 String dirPath = command.substring(3).trim();
-
                 File newDir;
 
                 if (dirPath.equals("~")) {
@@ -205,41 +171,31 @@ public class Main {
                 if (newDir.exists() && newDir.isDirectory()) {
                     currentDir = newDir.getCanonicalFile();
                 } else {
-                    System.out.println(
-                            "cd: " + dirPath + ": No such file or directory");
+                    System.out.println("cd: " + dirPath + ": No such file or directory");
                 }
             }
 
             else if (command.startsWith("type ")) {
-
                 String commandName = command.substring(5).trim();
-
                 if (builtins.contains(commandName)) {
                     System.out.println(commandName + " is a shell builtin");
                     continue;
                 }
-
                 File executable = findExecutable(commandName);
-
                 if (executable != null) {
-                    System.out.println(
-                            commandName + " is " + executable.getAbsolutePath());
+                    System.out.println(commandName + " is " + executable.getAbsolutePath());
                 } else {
                     System.out.println(commandName + ": not found");
                 }
             }
 
             else {
-
                 List<String> parts = parseCommand(command);
 
                 String outputFile = null;
                 int redirectIndex = -1;
-
                 for (int i = 0; i < parts.size(); i++) {
-                    if (parts.get(i).equals(">") ||
-                            parts.get(i).equals("1>")) {
-
+                    if (parts.get(i).equals(">") || parts.get(i).equals("1>")) {
                         redirectIndex = i;
                         outputFile = parts.get(i + 1);
                         break;
@@ -247,39 +203,30 @@ public class Main {
                 }
 
                 if (redirectIndex != -1) {
-                    parts = new ArrayList<>(
-                            parts.subList(0, redirectIndex));
+                    parts = new ArrayList<>(parts.subList(0, redirectIndex));
                 }
 
                 String commandName = parts.get(0);
                 File executable = findExecutable(commandName);
-
                 if (executable == null) {
                     System.out.println(commandName + ": command not found");
                     continue;
                 }
 
                 List<String> processCommand = new ArrayList<>(parts);
-
                 ProcessBuilder pb = new ProcessBuilder(processCommand);
+                pb.directory(currentDir); // ensure correct working directory
 
                 if (outputFile != null) {
                     pb.redirectOutput(new File(outputFile));
                 }
-
-                pb.redirectError(
-                        ProcessBuilder.Redirect.INHERIT);
+                pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 
                 Process process = pb.start();
 
                 if (outputFile == null) {
-
-                    BufferedReader reader = new BufferedReader(
-                            new InputStreamReader(
-                                    process.getInputStream()));
-
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
                     String line;
-
                     while ((line = reader.readLine()) != null) {
                         System.out.println(line);
                     }
