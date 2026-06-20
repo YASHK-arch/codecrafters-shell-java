@@ -112,6 +112,14 @@ public class Main {
                         }
                     }
                 }
+                if (ch == '|') {
+                    if (current.length() > 0) {
+                        tokens.add(current.toString());
+                        current.setLength(0);
+                    }
+                    tokens.add("|");
+                    continue;
+                }
             }
 
             if (Character.isWhitespace(ch) && !inSingleQuotes && !inDoubleQuotes) {
@@ -260,8 +268,75 @@ public class Main {
                 parts = new ArrayList<>(parts.subList(0, redirectIndex));
             }
 
-            if (parts.isEmpty())
+            if (parts.isEmpty()) {
+                if (out != System.out) out.close();
+                if (err != System.err) err.close();
                 continue;
+            }
+
+            int pipeIndex = parts.indexOf("|");
+
+            if (pipeIndex != -1) {
+                List<String> leftParts = new ArrayList<>(parts.subList(0, pipeIndex));
+                List<String> rightParts = new ArrayList<>(parts.subList(pipeIndex + 1, parts.size()));
+
+                File executableLeft = findExecutable(leftParts.get(0));
+                File executableRight = findExecutable(rightParts.get(0));
+
+                if (executableLeft == null) {
+                    err.println(leftParts.get(0) + ": command not found");
+                } else if (executableRight == null) {
+                    err.println(rightParts.get(0) + ": command not found");
+                } else {
+                    ProcessBuilder pb1 = new ProcessBuilder(leftParts);
+                    pb1.directory(currentDir);
+                    pb1.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+                    ProcessBuilder pb2 = new ProcessBuilder(rightParts);
+                    pb2.directory(currentDir);
+
+                    if (outputFile != null) {
+                        pb2.redirectOutput(appendOut ? ProcessBuilder.Redirect.appendTo(new File(outputFile))
+                                : ProcessBuilder.Redirect.to(new File(outputFile)));
+                    } else {
+                        pb2.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                    }
+
+                    if (errorFile != null) {
+                        pb2.redirectError(appendErr ? ProcessBuilder.Redirect.appendTo(new File(errorFile))
+                                : ProcessBuilder.Redirect.to(new File(errorFile)));
+                    } else {
+                        pb2.redirectError(ProcessBuilder.Redirect.INHERIT);
+                    }
+
+                    List<ProcessBuilder> builders = Arrays.asList(pb1, pb2);
+                    List<Process> processes = ProcessBuilder.startPipeline(builders);
+
+                    Process lastProcess = processes.get(processes.size() - 1);
+
+                    if (isBackground) {
+                        int nextJobNumber = 1;
+                        if (!jobs.isEmpty()) {
+                            int maxJobNumber = 0;
+                            for (Job j : jobs) {
+                                if (j.jobNumber > maxJobNumber) {
+                                    maxJobNumber = j.jobNumber;
+                                }
+                            }
+                            nextJobNumber = maxJobNumber + 1;
+                        }
+                        long pid = lastProcess.pid();
+                        jobs.add(new Job(nextJobNumber, pid, commandStr, "Running", lastProcess));
+                        System.out.println("[" + nextJobNumber + "] " + pid);
+                    } else {
+                        lastProcess.waitFor();
+                    }
+                }
+
+                if (out != System.out) out.close();
+                if (err != System.err) err.close();
+                continue;
+            }
 
             String cmd = parts.get(0);
 
