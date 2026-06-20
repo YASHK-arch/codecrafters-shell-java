@@ -3,24 +3,228 @@ import java.io.*;
 
 public class Main {
 
-    // Job class to store background job information
+    interface PipelineTask {
+        void start(InputStream in, OutputStream out, PrintStream err, boolean closeOut, File[] currentDirWrap, Set<String> builtins, List<Job> jobs) throws Exception;
+        void waitFor() throws Exception;
+        Long getPid();
+        boolean isAlive();
+    }
+
+    static class ProcessTask implements PipelineTask {
+        List<String> command;
+        Process process;
+        Thread outThread;
+        Thread errThread;
+        Thread inThread;
+
+        ProcessTask(List<String> command) {
+            this.command = command;
+        }
+
+        public void start(InputStream in, OutputStream out, PrintStream err, boolean closeOut, File[] currentDirWrap, Set<String> builtins, List<Job> jobs) throws Exception {
+            File executable = findExecutable(command.get(0));
+            if (executable == null) {
+                err.println(command.get(0) + ": command not found");
+                if (closeOut && out != null) {
+                    try { out.close(); } catch(Exception e) {}
+                }
+                if (in != null) {
+                    try { in.close(); } catch(Exception e) {}
+                }
+                return;
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.directory(currentDirWrap[0]);
+
+            this.process = pb.start();
+
+            outThread = new Thread(() -> {
+                try {
+                    process.getInputStream().transferTo(out);
+                    out.flush();
+                } catch (IOException e) {}
+                finally {
+                    try { process.getInputStream().close(); } catch(Exception e) {}
+                    if (closeOut) {
+                        try { out.close(); } catch(Exception e) {}
+                    }
+                }
+            });
+            outThread.start();
+
+            errThread = new Thread(() -> {
+                try {
+                    process.getErrorStream().transferTo(err);
+                    err.flush();
+                } catch (IOException e) {}
+                finally {
+                    try { process.getErrorStream().close(); } catch(Exception e) {}
+                }
+            });
+            errThread.start();
+
+            if (in != null) {
+                inThread = new Thread(() -> {
+                    try {
+                        in.transferTo(process.getOutputStream());
+                        process.getOutputStream().flush();
+                    } catch (IOException e) {}
+                    finally {
+                        try { process.getOutputStream().close(); } catch(Exception e) {}
+                        try { in.close(); } catch(Exception e) {}
+                    }
+                });
+                inThread.start();
+            } else {
+                process.getOutputStream().close();
+            }
+        }
+
+        public void waitFor() throws Exception {
+            if (process != null) {
+                process.waitFor();
+            }
+            if (outThread != null) outThread.join();
+            if (errThread != null) errThread.join();
+            if (inThread != null) inThread.join();
+        }
+
+        public Long getPid() {
+            return process != null ? process.pid() : null;
+        }
+
+        public boolean isAlive() {
+            return process != null && process.isAlive();
+        }
+    }
+
+    static class BuiltinTask implements PipelineTask {
+        List<String> command;
+        Thread thread;
+
+        BuiltinTask(List<String> command) {
+            this.command = command;
+        }
+
+        public void start(InputStream in, OutputStream out, PrintStream err, boolean closeOut, File[] currentDirWrap, Set<String> builtins, List<Job> jobs) throws Exception {
+            thread = new Thread(() -> {
+                try {
+                    PrintStream outPrint = new PrintStream(out, true);
+                    String cmd = command.get(0);
+
+                    if (cmd.equals("exit")) {
+                        System.exit(0);
+                    } else if (cmd.equals("echo")) {
+                        for (int i = 1; i < command.size(); i++) {
+                            if (i > 1) outPrint.print(" ");
+                            outPrint.print(command.get(i));
+                        }
+                        outPrint.println();
+                    } else if (cmd.equals("pwd")) {
+                        outPrint.println(currentDirWrap[0].getAbsolutePath());
+                    } else if (cmd.equals("cd")) {
+                        if (command.size() < 2) {
+                            err.println("cd: missing operand");
+                        } else {
+                            String dirPath = command.get(1);
+                            File newDir;
+                            if (dirPath.equals("~")) {
+                                newDir = new File(System.getenv("HOME"));
+                            } else if (dirPath.startsWith("/")) {
+                                newDir = new File(dirPath);
+                            } else {
+                                newDir = new File(currentDirWrap[0], dirPath);
+                            }
+
+                            if (newDir.exists() && newDir.isDirectory()) {
+                                currentDirWrap[0] = newDir.getCanonicalFile();
+                            } else {
+                                err.println("cd: " + dirPath + ": No such file or directory");
+                            }
+                        }
+                    } else if (cmd.equals("jobs")) {
+                        for (Job job : jobs) {
+                            if (job.task != null && !job.task.isAlive()) {
+                                job.status = "Done";
+                            }
+                        }
+                        for (int i = 0; i < jobs.size(); i++) {
+                            Job job = jobs.get(i);
+                            char marker = ' ';
+                            if (i == jobs.size() - 1) marker = '+';
+                            else if (i == jobs.size() - 2) marker = '-';
+
+                            String statusPadded = String.format("%-24s", job.status);
+                            String commandLine = job.command;
+                            if (job.status.equals("Running")) {
+                                commandLine += " &";
+                            }
+                            outPrint.println("[" + job.jobNumber + "]" + marker + "  " + statusPadded + commandLine);
+                        }
+                        jobs.removeIf(job -> job.status.equals("Done"));
+                    } else if (cmd.equals("type")) {
+                        if (command.size() < 2) {
+                            err.println("type: missing operand");
+                        } else {
+                            String commandName = command.get(1);
+                            if (builtins.contains(commandName)) {
+                                outPrint.println(commandName + " is a shell builtin");
+                            } else {
+                                File executable = findExecutable(commandName);
+                                if (executable != null) {
+                                    outPrint.println(commandName + " is " + executable.getAbsolutePath());
+                                } else {
+                                    err.println(commandName + ": not found");
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace(err);
+                } finally {
+                    if (closeOut) {
+                        try { out.close(); } catch(Exception e) {}
+                    }
+                    if (in != null) {
+                        try { in.close(); } catch(Exception e) {}
+                    }
+                }
+            });
+            thread.start();
+        }
+
+        public void waitFor() throws Exception {
+            if (thread != null) {
+                thread.join();
+            }
+        }
+
+        public Long getPid() {
+            return 0L;
+        }
+
+        public boolean isAlive() {
+            return thread != null && thread.isAlive();
+        }
+    }
+
     static class Job {
         int jobNumber;
         long pid;
         String command;
         String status;
-        Process process;
+        PipelineTask task;
 
-        Job(int jobNumber, long pid, String command, String status, Process process) {
+        Job(int jobNumber, long pid, String command, String status, PipelineTask task) {
             this.jobNumber = jobNumber;
             this.pid = pid;
             this.command = command;
             this.status = status;
-            this.process = process;
+            this.task = task;
         }
     }
 
-    // Input PARSER
     private static List<String> parseCommand(String input) {
         List<String> tokens = new ArrayList<>();
         StringBuilder current = new StringBuilder();
@@ -31,7 +235,6 @@ public class Main {
         for (int i = 0; i < input.length(); i++) {
             char ch = input.charAt(i);
 
-            // Backslashes inside double quotes
             if (ch == '\\' && inDoubleQuotes) {
                 if (i + 1 < input.length()) {
                     char next = input.charAt(i + 1);
@@ -44,11 +247,10 @@ public class Main {
                 current.append('\\');
                 continue;
             }
-            // Backslash escaping outside quotes
             if (ch == '\\' && !inSingleQuotes && !inDoubleQuotes) {
                 if (i + 1 < input.length()) {
                     current.append(input.charAt(i + 1));
-                    i++; // skip escaped character
+                    i++;
                 }
                 continue;
             }
@@ -64,10 +266,9 @@ public class Main {
             }
 
             if (!inSingleQuotes && !inDoubleQuotes) {
-                // Handle redirection operators
                 if (ch == '>') {
                     if (i > 0 && input.charAt(i - 1) == '>') {
-                        continue; // already handled as >>
+                        continue;
                     }
                     if (i + 1 < input.length() && input.charAt(i + 1) == '>') {
                         if (current.length() > 0) {
@@ -139,7 +340,6 @@ public class Main {
         return tokens;
     }
 
-    // Checks Executability of the file and whether it exists or not
     private static File findExecutable(String commandName) {
         String pathEnv = System.getenv("PATH");
         if (pathEnv == null) {
@@ -155,21 +355,16 @@ public class Main {
         return null;
     }
 
-    // Reap completed background jobs and display them as Done
     private static void reapJobs(List<Job> jobs, PrintStream out) {
-        // Check which jobs have completed
         for (Job job : jobs) {
-            if (!job.process.isAlive()) {
+            if (job.task != null && !job.task.isAlive()) {
                 job.status = "Done";
             }
         }
 
-        // Display completed jobs as Done
         for (int i = 0; i < jobs.size(); i++) {
             Job job = jobs.get(i);
             if (job.status.equals("Done")) {
-                // Determine marker: + for most recent, - for second most recent, space for
-                // others
                 char marker = ' ';
                 if (i == jobs.size() - 1) {
                     marker = '+';
@@ -181,7 +376,6 @@ public class Main {
             }
         }
 
-        // Remove completed jobs
         jobs.removeIf(job -> job.status.equals("Done"));
     }
 
@@ -196,29 +390,26 @@ public class Main {
         builtins.add("cd");
         builtins.add("jobs");
 
-        File currentDir = new File(System.getProperty("user.dir"));
+        File[] currentDirWrap = new File[] { new File(System.getProperty("user.dir")) };
         List<Job> jobs = new ArrayList<>();
 
         while (true) {
-            // Reap completed background jobs before prompt
             reapJobs(jobs, System.out);
 
             System.out.print("$ ");
+            if (!sc.hasNextLine()) break;
             String command = sc.nextLine();
 
             List<String> parts = parseCommand(command);
 
-            // Check for background execution (&)
             boolean isBackground = false;
             if (!parts.isEmpty() && parts.get(parts.size() - 1).equals("&")) {
                 isBackground = true;
                 parts.remove(parts.size() - 1);
             }
 
-            // Save command for jobs list (before redirection trimming)
             String commandStr = String.join(" ", parts);
 
-            // Handle redirection
             String outputFile = null;
             String errorFile = null;
             boolean appendOut = false;
@@ -263,7 +454,6 @@ public class Main {
                 err = new PrintStream(new FileOutputStream(errorFile, appendErr));
             }
 
-            // Trim command parts before redirection
             if (redirectIndex != -1) {
                 parts = new ArrayList<>(parts.subList(0, redirectIndex));
             }
@@ -274,208 +464,84 @@ public class Main {
                 continue;
             }
 
-            int pipeIndex = parts.indexOf("|");
-
-            if (pipeIndex != -1) {
-                List<String> leftParts = new ArrayList<>(parts.subList(0, pipeIndex));
-                List<String> rightParts = new ArrayList<>(parts.subList(pipeIndex + 1, parts.size()));
-
-                File executableLeft = findExecutable(leftParts.get(0));
-                File executableRight = findExecutable(rightParts.get(0));
-
-                if (executableLeft == null) {
-                    err.println(leftParts.get(0) + ": command not found");
-                } else if (executableRight == null) {
-                    err.println(rightParts.get(0) + ": command not found");
+            List<List<String>> pipelineCommands = new ArrayList<>();
+            List<String> currentCmd = new ArrayList<>();
+            for (String part : parts) {
+                if (part.equals("|")) {
+                    if (!currentCmd.isEmpty()) {
+                        pipelineCommands.add(currentCmd);
+                        currentCmd = new ArrayList<>();
+                    }
                 } else {
-                    ProcessBuilder pb1 = new ProcessBuilder(leftParts);
-                    pb1.directory(currentDir);
-                    pb1.redirectError(ProcessBuilder.Redirect.INHERIT);
-
-                    ProcessBuilder pb2 = new ProcessBuilder(rightParts);
-                    pb2.directory(currentDir);
-
-                    if (outputFile != null) {
-                        pb2.redirectOutput(appendOut ? ProcessBuilder.Redirect.appendTo(new File(outputFile))
-                                : ProcessBuilder.Redirect.to(new File(outputFile)));
-                    } else {
-                        pb2.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-                    }
-
-                    if (errorFile != null) {
-                        pb2.redirectError(appendErr ? ProcessBuilder.Redirect.appendTo(new File(errorFile))
-                                : ProcessBuilder.Redirect.to(new File(errorFile)));
-                    } else {
-                        pb2.redirectError(ProcessBuilder.Redirect.INHERIT);
-                    }
-
-                    List<ProcessBuilder> builders = Arrays.asList(pb1, pb2);
-                    List<Process> processes = ProcessBuilder.startPipeline(builders);
-
-                    Process lastProcess = processes.get(processes.size() - 1);
-
-                    if (isBackground) {
-                        int nextJobNumber = 1;
-                        if (!jobs.isEmpty()) {
-                            int maxJobNumber = 0;
-                            for (Job j : jobs) {
-                                if (j.jobNumber > maxJobNumber) {
-                                    maxJobNumber = j.jobNumber;
-                                }
-                            }
-                            nextJobNumber = maxJobNumber + 1;
-                        }
-                        long pid = lastProcess.pid();
-                        jobs.add(new Job(nextJobNumber, pid, commandStr, "Running", lastProcess));
-                        System.out.println("[" + nextJobNumber + "] " + pid);
-                    } else {
-                        lastProcess.waitFor();
-                    }
+                    currentCmd.add(part);
                 }
+            }
+            if (!currentCmd.isEmpty()) {
+                pipelineCommands.add(currentCmd);
+            }
 
+            if (pipelineCommands.isEmpty()) {
                 if (out != System.out) out.close();
                 if (err != System.err) err.close();
                 continue;
             }
 
-            String cmd = parts.get(0);
-
-            if (cmd.equals("exit")) {
-                break;
-            }
-
-            else if (cmd.equals("echo")) {
-                for (int i = 1; i < parts.size(); i++) {
-                    if (i > 1)
-                        out.print(" ");
-                    out.print(parts.get(i));
-                }
-                out.println();
-            }
-
-            else if (cmd.equals("pwd")) {
-                out.println(currentDir.getAbsolutePath());
-            }
-
-            else if (cmd.equals("cd")) {
-                if (parts.size() < 2) {
-                    err.println("cd: missing operand");
+            List<PipelineTask> tasks = new ArrayList<>();
+            for (List<String> pCmd : pipelineCommands) {
+                if (builtins.contains(pCmd.get(0))) {
+                    tasks.add(new BuiltinTask(pCmd));
                 } else {
-                    String dirPath = parts.get(1);
-                    File newDir;
-                    if (dirPath.equals("~")) {
-                        newDir = new File(System.getenv("HOME"));
-                    } else if (dirPath.startsWith("/")) {
-                        newDir = new File(dirPath);
-                    } else {
-                        newDir = new File(currentDir, dirPath);
-                    }
-
-                    if (newDir.exists() && newDir.isDirectory()) {
-                        currentDir = newDir.getCanonicalFile();
-                    } else {
-                        err.println("cd: " + dirPath + ": No such file or directory");
-                    }
+                    tasks.add(new ProcessTask(pCmd));
                 }
-            } else if (cmd.equals("jobs")) {
-                // First, check which jobs have completed
-                for (Job job : jobs) {
-                    if (!job.process.isAlive()) {
-                        job.status = "Done";
-                    }
-                }
+            }
 
-                // Display all jobs
-                for (int i = 0; i < jobs.size(); i++) {
-                    Job job = jobs.get(i);
-                    // Determine marker: + for most recent, - for second most recent, space for
-                    // others
-                    char marker = ' ';
-                    if (i == jobs.size() - 1) {
-                        // Most recent job (last in list)
-                        marker = '+';
-                    } else if (i == jobs.size() - 2) {
-                        // Second most recent job
-                        marker = '-';
-                    }
-                    // Format: [1]+ Running sleep 10 &
-                    String statusPadded = String.format("%-24s", job.status);
-                    String commandLine = job.command;
-                    if (job.status.equals("Running")) {
-                        commandLine += " &";
-                    }
-                    out.println("[" + job.jobNumber + "]" + marker + "  " + statusPadded + commandLine);
-                }
+            InputStream currentIn = null;
 
-                // Remove completed jobs
-                jobs.removeIf(job -> job.status.equals("Done"));
-            } else if (cmd.equals("type")) {
-                if (parts.size() < 2) {
-                    err.println("type: missing operand");
+            for (int i = 0; i < tasks.size(); i++) {
+                PipelineTask task = tasks.get(i);
+                OutputStream taskOut;
+                InputStream nextIn = null;
+                boolean closeOut = false;
+
+                if (i == tasks.size() - 1) {
+                    taskOut = out;
                 } else {
-                    String commandName = parts.get(1);
-                    if (builtins.contains(commandName)) {
-                        out.println(commandName + " is a shell builtin");
-                    } else {
-                        File executable = findExecutable(commandName);
-                        if (executable != null) {
-                            out.println(commandName + " is " + executable.getAbsolutePath());
-                        } else {
-                            err.println(commandName + ": not found");
+                    PipedOutputStream pos = new PipedOutputStream();
+                    PipedInputStream pis = new PipedInputStream(pos);
+                    taskOut = pos;
+                    nextIn = pis;
+                    closeOut = true;
+                }
+
+                task.start(currentIn, taskOut, err, closeOut, currentDirWrap, builtins, jobs);
+                currentIn = nextIn;
+            }
+
+            if (isBackground) {
+                int nextJobNumber = 1;
+                if (!jobs.isEmpty()) {
+                    int maxJobNumber = 0;
+                    for (Job j : jobs) {
+                        if (j.jobNumber > maxJobNumber) {
+                            maxJobNumber = j.jobNumber;
                         }
                     }
+                    nextJobNumber = maxJobNumber + 1;
+                }
+                PipelineTask lastTask = tasks.get(tasks.size() - 1);
+                Long pid = lastTask.getPid();
+                if (pid == null) pid = 0L;
+                
+                jobs.add(new Job(nextJobNumber, pid, commandStr, "Running", lastTask));
+                System.out.println("[" + nextJobNumber + "] " + pid);
+            } else {
+                for (PipelineTask task : tasks) {
+                    task.waitFor();
                 }
             }
 
-            else {
-                File executable = findExecutable(cmd);
-                if (executable == null) {
-                    err.println(cmd + ": command not found");
-                } else {
-                    ProcessBuilder pb = new ProcessBuilder(parts);
-                    pb.directory(currentDir);
-
-                    if (outputFile != null) {
-                        pb.redirectOutput(appendOut ? ProcessBuilder.Redirect.appendTo(new File(outputFile))
-                                : ProcessBuilder.Redirect.to(new File(outputFile)));
-                    } else {
-                        pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-                    }
-
-                    if (errorFile != null) {
-                        pb.redirectError(appendErr ? ProcessBuilder.Redirect.appendTo(new File(errorFile))
-                                : ProcessBuilder.Redirect.to(new File(errorFile)));
-                    } else {
-                        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-                    }
-
-                    Process process = pb.start();
-
-                    if (isBackground) {
-                        // Track the background job
-                        int nextJobNumber = 1;
-                        if (!jobs.isEmpty()) {
-                            int maxJobNumber = 0;
-                            for (Job j : jobs) {
-                                if (j.jobNumber > maxJobNumber) {
-                                    maxJobNumber = j.jobNumber;
-                                }
-                            }
-                            nextJobNumber = maxJobNumber + 1;
-                        }
-                        long pid = process.pid();
-                        jobs.add(new Job(nextJobNumber, pid, commandStr, "Running", process));
-                        System.out.println("[" + nextJobNumber + "] " + pid);
-                    } else {
-                        process.waitFor();
-                    }
-                }
-            }
-
-            if (out != System.out)
-                out.close();
-            if (err != System.err)
-                err.close();
+            if (out != System.out) out.close();
+            if (err != System.err) err.close();
         }
 
         sc.close();
