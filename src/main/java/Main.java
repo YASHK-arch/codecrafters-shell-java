@@ -142,12 +142,20 @@ public class Main {
         builtins.add("jobs");
 
         File currentDir = new File(System.getProperty("user.dir"));
+        int jobCounter = 0;
 
         while (true) {
             System.out.print("$ ");
             String command = sc.nextLine();
 
             List<String> parts = parseCommand(command);
+
+            // Check for background execution (&)
+            boolean isBackground = false;
+            if (!parts.isEmpty() && parts.get(parts.size() - 1).equals("&")) {
+                isBackground = true;
+                parts.remove(parts.size() - 1);
+            }
 
             // Handle redirection
             String outputFile = null;
@@ -284,15 +292,22 @@ public class Main {
 
                     Process process = pb.start();
 
-                    if (outputFile == null) {
-                        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            System.out.println(line);
+                    if (isBackground) {
+                        // Print job number and PID
+                        jobCounter++;
+                        long pid = process.pid();
+                        System.out.println("[" + jobCounter + "] " + pid);
+                    } else {
+                        if (outputFile == null) {
+                            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                System.out.println(line);
+                            }
                         }
-                    }
 
-                    process.waitFor();
+                        process.waitFor();
+                    }
                 }
             }
 
