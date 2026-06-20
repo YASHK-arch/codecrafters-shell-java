@@ -282,7 +282,10 @@ public class Main {
                     if (outputFile != null) {
                         pb.redirectOutput(appendOut ? ProcessBuilder.Redirect.appendTo(new File(outputFile))
                                 : ProcessBuilder.Redirect.to(new File(outputFile)));
+                    } else {
+                        pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                     }
+
                     if (errorFile != null) {
                         pb.redirectError(appendErr ? ProcessBuilder.Redirect.appendTo(new File(errorFile))
                                 : ProcessBuilder.Redirect.to(new File(errorFile)));
@@ -298,14 +301,6 @@ public class Main {
                         long pid = process.pid();
                         System.out.println("[" + jobCounter + "] " + pid);
                     } else {
-                        if (outputFile == null) {
-                            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                            String line;
-                            while ((line = reader.readLine()) != null) {
-                                System.out.println(line);
-                            }
-                        }
-
                         process.waitFor();
                     }
                 }
