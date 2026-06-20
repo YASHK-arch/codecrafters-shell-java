@@ -89,7 +89,7 @@ public class Main {
         if (pathEnv == null) {
             return null;
         }
-        String[] pathDirs = pathEnv.split(File.pathSeparator);
+        String[] pathDirs = pathEnv.split(File.separator.equals(":") ? ":" : File.pathSeparator);
         for (String dir : pathDirs) {
             File file = new File(dir, commandName);
             if (file.exists() && file.canExecute()) {
@@ -115,124 +115,119 @@ public class Main {
             System.out.print("$ ");
             String command = sc.nextLine();
 
-            if (command.equals("exit")) {
+            List<String> parts = parseCommand(command);
+
+            // Handle redirection
+            String outputFile = null;
+            int redirectIndex = -1;
+            for (int i = 0; i < parts.size(); i++) {
+                if (parts.get(i).equals(">") || parts.get(i).equals("1>")) {
+                    redirectIndex = i;
+                    if (i + 1 < parts.size()) {
+                        outputFile = parts.get(i + 1);
+                    }
+                    break;
+                }
+            }
+
+            PrintStream out = System.out;
+            if (outputFile != null) {
+                out = new PrintStream(new FileOutputStream(outputFile));
+            }
+
+            // Trim command parts before redirection
+            if (redirectIndex != -1) {
+                parts = new ArrayList<>(parts.subList(0, redirectIndex));
+            }
+
+            if (parts.isEmpty()) continue;
+
+            String cmd = parts.get(0);
+
+            if (cmd.equals("exit")) {
                 break;
             }
 
-            else if (command.startsWith("echo ")) {
-                List<String> parts = parseCommand(command);
-
-                String outputFile = null;
-                int redirectIndex = -1;
-
-                for (int i = 0; i < parts.size(); i++) {
-                    if (parts.get(i).equals(">") || parts.get(i).equals("1>")) {
-                        redirectIndex = i;
-                        outputFile = parts.get(i + 1);
-                        break;
-                    }
-                }
-
-                PrintStream out = System.out;
-                if (outputFile != null) {
-                    out = new PrintStream(new FileOutputStream(outputFile));
-                }
-
-                int end = redirectIndex == -1 ? parts.size() : redirectIndex;
-                for (int i = 1; i < end; i++) {
-                    if (i > 1) {
-                        out.print(" ");
-                    }
+            else if (cmd.equals("echo")) {
+                for (int i = 1; i < parts.size(); i++) {
+                    if (i > 1) out.print(" ");
                     out.print(parts.get(i));
                 }
                 out.println();
+            }
 
-                if (out != System.out) {
-                    out.close();
+            else if (cmd.equals("pwd")) {
+                out.println(currentDir.getAbsolutePath());
+            }
+
+            else if (cmd.equals("cd")) {
+                if (parts.size() < 2) {
+                    out.println("cd: missing operand");
+                } else {
+                    String dirPath = parts.get(1);
+                    File newDir;
+                    if (dirPath.equals("~")) {
+                        newDir = new File(System.getenv("HOME"));
+                    } else if (dirPath.startsWith("/")) {
+                        newDir = new File(dirPath);
+                    } else {
+                        newDir = new File(currentDir, dirPath);
+                    }
+
+                    if (newDir.exists() && newDir.isDirectory()) {
+                        currentDir = newDir.getCanonicalFile();
+                    } else {
+                        out.println("cd: " + dirPath + ": No such file or directory");
+                    }
                 }
             }
 
-            else if (command.equals("pwd")) {
-                System.out.println(currentDir.getAbsolutePath());
-            }
-
-            else if (command.startsWith("cd ")) {
-                String dirPath = command.substring(3).trim();
-                File newDir;
-
-                if (dirPath.equals("~")) {
-                    newDir = new File(System.getenv("HOME"));
-                } else if (dirPath.startsWith("/")) {
-                    newDir = new File(dirPath);
+            else if (cmd.equals("type")) {
+                if (parts.size() < 2) {
+                    out.println("type: missing operand");
                 } else {
-                    newDir = new File(currentDir, dirPath);
-                }
-
-                if (newDir.exists() && newDir.isDirectory()) {
-                    currentDir = newDir.getCanonicalFile();
-                } else {
-                    System.out.println("cd: " + dirPath + ": No such file or directory");
-                }
-            }
-
-            else if (command.startsWith("type ")) {
-                String commandName = command.substring(5).trim();
-                if (builtins.contains(commandName)) {
-                    System.out.println(commandName + " is a shell builtin");
-                    continue;
-                }
-                File executable = findExecutable(commandName);
-                if (executable != null) {
-                    System.out.println(commandName + " is " + executable.getAbsolutePath());
-                } else {
-                    System.out.println(commandName + ": not found");
+                    String commandName = parts.get(1);
+                    if (builtins.contains(commandName)) {
+                        out.println(commandName + " is a shell builtin");
+                    } else {
+                        File executable = findExecutable(commandName);
+                        if (executable != null) {
+                            out.println(commandName + " is " + executable.getAbsolutePath());
+                        } else {
+                            out.println(commandName + ": not found");
+                        }
+                    }
                 }
             }
 
             else {
-                List<String> parts = parseCommand(command);
-
-                String outputFile = null;
-                int redirectIndex = -1;
-                for (int i = 0; i < parts.size(); i++) {
-                    if (parts.get(i).equals(">") || parts.get(i).equals("1>")) {
-                        redirectIndex = i;
-                        outputFile = parts.get(i + 1);
-                        break;
-                    }
-                }
-
-                if (redirectIndex != -1) {
-                    parts = new ArrayList<>(parts.subList(0, redirectIndex));
-                }
-
-                String commandName = parts.get(0);
-                File executable = findExecutable(commandName);
+                File executable = findExecutable(cmd);
                 if (executable == null) {
-                    System.out.println(commandName + ": command not found");
-                    continue;
-                }
-
-                List<String> processCommand = new ArrayList<>(parts);
-                ProcessBuilder pb = new ProcessBuilder(processCommand);
-                pb.directory(currentDir); // ensure correct working directory
-
-                if (outputFile != null) {
-                    pb.redirectOutput(new File(outputFile));
-                }
-                pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-
-                Process process = pb.start();
-
-                if (outputFile == null) {
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        System.out.println(line);
+                    out.println(cmd + ": command not found");
+                } else {
+                    ProcessBuilder pb = new ProcessBuilder(parts);
+                    pb.directory(currentDir);
+                    if (outputFile != null) {
+                        pb.redirectOutput(new File(outputFile));
                     }
-                }
+                    pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 
-                process.waitFor();
+                    Process process = pb.start();
+
+                    if (outputFile == null) {
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            System.out.println(line);
+                        }
+                    }
+
+                    process.waitFor();
+                }
+            }
+
+            if (out != System.out) {
+                out.close();
             }
         }
 
